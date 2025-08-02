@@ -1,0 +1,16 @@
+[package]
+name = "stride"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+clap = { version = "4.5.42", features = ["derive"] }
+humantime = "2.2.0"
+iced = { version = "0.13.1", features = ["smol"] }
+iced_layershell = "0.13.7"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

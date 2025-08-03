@@ -31,14 +31,25 @@
     packages.${system}.default = pkgs.rustPlatform.buildRustPackage {
       name = "stride";
       src = ./.;
+      nativeBuildInputs = with pkgs; [
+        pkg-config
+        makeWrapper
+      ];
       buildInputs = with pkgs; [
         libGL
-        pkg-config
         wayland
         libxkbcommon
+        vulkan-loader
       ];
-      cargoBuildFlags = "--release";
       cargoLock.lockFile = ./Cargo.lock;
+      postInstall = ''
+        # Create a shell script wrapper for your binary
+        wrapProgram $out/bin/stride \
+          --prefix LD_LIBRARY_PATH : "${pkgs.wayland}/lib" \
+          --prefix LD_LIBRARY_PATH : "${pkgs.libxkbcommon}/lib" \
+          --prefix LD_LIBRARY_PATH : "${pkgs.vulkan-loader}/lib" \
+          --prefix LD_LIBRARY_PATH : "${pkgs.libGL}/lib" \
+      '';
     };
   };
 }

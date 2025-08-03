@@ -84,7 +84,7 @@ impl Application for Wellness {
     }
 
     fn subscription(&self) -> iced::Subscription<Self::Message> {
-        iced::time::every(Duration::from_secs(1)).map(Message::Tick)
+        iced::time::every(self.duration).map(Message::Tick)
     }
 
     fn update(&mut self, message: Message) -> Task<Message> {

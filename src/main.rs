@@ -1,3 +1,4 @@
+use std::fs::File;
 use std::time::{Duration, Instant};
 
 use humantime::Duration as hDuration;
@@ -10,6 +11,7 @@ use iced_layershell::settings::{LayerShellSettings, Settings, StartMode};
 use iced_layershell::to_layer_message;
 
 use clap::Parser;
+use rodio::{Decoder, OutputStream, Sink};
 
 #[derive(Parser, Debug, Default)]
 #[command(version, about, long_about = None)]
@@ -19,6 +21,9 @@ struct Args {
 
     #[arg(default_value = "20s")]
     duration: hDuration,
+
+    #[arg(default_value = "20m")]
+    interval: hDuration,
 }
 
 pub fn main() -> Result<(), iced_layershell::Error> {
@@ -49,6 +54,9 @@ struct Wellness {
     message: String,
     duration: Duration,
     start: Instant,
+    interval: Duration,
+    done: bool,
+    audio_stream: OutputStream,
 }
 
 #[to_layer_message]
@@ -56,6 +64,7 @@ struct Wellness {
 #[doc = "Some docs"]
 enum Message {
     Kill,
+    Respawn,
     Tick(Instant),
 }
 
@@ -71,6 +80,10 @@ impl Application for Wellness {
                 message: flags.message,
                 duration: *flags.duration,
                 start: Instant::now(),
+                interval: *flags.interval,
+                done: false,
+                audio_stream: rodio::OutputStreamBuilder::open_default_stream()
+                    .expect("open default audio stream"),
             },
             Task::done(Message::AnchorSizeChange(
                 Anchor::Bottom | Anchor::Left | Anchor::Right | Anchor::Top,
@@ -80,20 +93,41 @@ impl Application for Wellness {
     }
 
     fn namespace(&self) -> String {
-        String::from("Hello - Iced")
+        self.message.clone()
     }
 
     fn subscription(&self) -> iced::Subscription<Self::Message> {
-        iced::time::every(self.duration).map(Message::Tick)
+        let millis = gcd::binary_u128(self.duration.as_millis(), self.duration.as_millis()) as u64;
+        let time = Duration::from_millis(millis);
+        iced::time::every(time).map(Message::Tick)
     }
 
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            Message::Kill => iced::exit(),
+            Message::Kill => {
+                self.start = Instant::now();
+                self.done = !self.done;
+                let sink = Sink::connect_new(&self.audio_stream.mixer());
+                if let Ok(file) = File::open("sound.mp3") {
+                    if let Ok(source) = Decoder::new(std::io::BufReader::new(file)) {
+                        sink.append(source);
+                        sink.detach();
+                    }
+                } else {
+                    eprintln!("WHHHY");
+                }
+                Task::done(Message::SizeChange((1, 1)))
+            }
+            Message::Respawn => {
+                self.start = Instant::now();
+                self.done = !self.done;
+                Task::done(Message::SizeChange((0, 0)))
+            }
             Message::Tick(now) => {
-                println!("{:?}", &now);
-                if now.duration_since(self.start.into()) >= self.duration {
+                if !self.done && now.duration_since(self.start.into()) >= self.duration {
                     Task::done(Message::Kill)
+                } else if self.done && now.duration_since(self.start.into()) >= self.interval {
+                    Task::done(Message::Respawn)
                 } else {
                     Task::none()
                 }

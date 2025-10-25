@@ -4,15 +4,9 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-clap = { version = "4.5.42", features = ["derive"] }
-gcd = "2.3.0"
-humantime = "2.2.0"
-iced = { version = "0.13.1", features = ["smol"] }
-iced_layershell = "0.13.7"
-rodio = { version = "0.21.1", default-features = false, features = [
-  "mp3",
-  "playback",
-] }
+gtk4 = "0.10.1"
+gtk4-layer-shell = "0.6.3"
+rodio = { version = "0.21.1", default-features = false, features = ["playback"] }
 
 [profile.release]
 lto = true

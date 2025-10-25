@@ -1,176 +1,99 @@
-use std::fs::File;
-use std::time::{Duration, Instant};
+use gtk4::prelude::*;
+use gtk4::{Application, ApplicationWindow, Button, glib};
+use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
+use rodio::source::{SineWave, Source};
+use rodio::{OutputStream, Sink};
+use std::time::Duration;
 
-use humantime::Duration as hDuration;
+const VISIBLE_SECS: u64 = 20;
+const HIDDEN_SECS: u64 = 1200;
 
-use iced::widget::{button, column, container, text};
-use iced::{Alignment, Element, Length, Task, Theme};
-use iced_layershell::reexport::{Anchor, Layer};
-use iced_layershell::settings::{LayerShellSettings, Settings, StartMode};
-use iced_layershell::to_layer_message;
-use iced_layershell::Application;
+fn main() -> glib::ExitCode {
+    let application = Application::builder()
+        .application_id("com.example.FirstGtkApp")
+        .build();
 
-use clap::Parser;
-use rodio::{Decoder, OutputStream, Sink};
+    application.connect_activate(build_ui);
 
-#[derive(Parser, Debug, Default)]
-#[command(version, about, long_about = None)]
-struct Args {
-    #[arg()]
-    message: String,
-
-    #[arg(default_value = "20s")]
-    duration: hDuration,
-
-    #[arg(default_value = "20m")]
-    interval: hDuration,
+    application.run()
 }
 
-pub fn main() -> Result<(), iced_layershell::Error> {
-    let binded_output_name = std::env::args().nth(1);
-
-    let start_mode = match binded_output_name {
-        Some(output) => StartMode::TargetScreen(output),
-        None => StartMode::Active,
-    };
-
-    Wellness::run(Settings {
-        layer_settings: LayerShellSettings {
-            size: Some((1920, 1080)),
-
-            anchor: Anchor::Bottom | Anchor::Left | Anchor::Right | Anchor::Top,
-
-            layer: Layer::Overlay,
-            start_mode,
-            keyboard_interactivity: iced_layershell::reexport::KeyboardInteractivity::None,
-            ..Default::default()
-        },
-        flags: dbg!(Args::parse()),
-        ..Default::default()
-    })
-}
-
-struct Wellness {
-    message: String,
-    duration: Duration,
-    start: Instant,
-    interval: Duration,
-    done: bool,
-    audio_stream: OutputStream,
-}
-
-#[to_layer_message]
-#[derive(Debug, Clone)]
-#[doc = "Some docs"]
-enum Message {
-    Kill,
-    Respawn,
-    Tick(Instant),
-}
-
-impl Application for Wellness {
-    type Message = Message;
-    type Flags = Args;
-    type Theme = Theme;
-    type Executor = iced::executor::Default;
-
-    fn new(flags: Self::Flags) -> (Self, Task<Message>) {
-        (
-            Self {
-                message: flags.message,
-                duration: *flags.duration,
-                start: Instant::now(),
-                interval: *flags.interval,
-                done: false,
-                audio_stream: rodio::OutputStreamBuilder::open_default_stream()
-                    .expect("open default audio stream"),
-            },
-            Task::done(Message::AnchorSizeChange(
-                Anchor::Bottom | Anchor::Left | Anchor::Right | Anchor::Top,
-                (0, 0),
-            )),
-        )
-    }
-
-    fn namespace(&self) -> String {
-        self.message.clone()
-    }
-
-    fn subscription(&self) -> iced::Subscription<Self::Message> {
-        let millis = gcd::binary_u128(self.duration.as_millis(), self.duration.as_millis()) as u64;
-        let time = Duration::from_millis(millis);
-        iced::time::every(time).map(Message::Tick)
-    }
-
-    fn update(&mut self, message: Message) -> Task<Message> {
-        match message {
-            Message::Kill => {
-                self.start = Instant::now();
-                self.done = !self.done;
-                let sink = Sink::connect_new(&self.audio_stream.mixer());
-                if let Ok(file) = File::open("sound.mp3") {
-                    if let Ok(source) = Decoder::new(std::io::BufReader::new(file)) {
-                        sink.append(source);
-                        sink.detach();
-                    }
-                } else {
-                    eprintln!("WHHHY");
-                }
-                Task::done(Message::SizeChange((1, 1)))
-            }
-            Message::Respawn => {
-                self.start = Instant::now();
-                self.done = !self.done;
-                Task::done(Message::SizeChange((0, 0)))
-            }
-            Message::Tick(now) => {
-                if !self.done && now.duration_since(self.start.into()) >= self.duration {
-                    Task::done(Message::Kill)
-                } else if self.done && now.duration_since(self.start.into()) >= self.interval {
-                    Task::done(Message::Respawn)
-                } else {
-                    Task::none()
-                }
-            }
-
-            _ => unreachable!(),
+fn build_ui(app: &Application) {
+    let provider = gtk4::CssProvider::new();
+    let css_data = r#"
+        .title-label {
+            font-size: 192pt;
+            font-weight: bold;
+            color: #4CAF50;
+            font-family: "MonaspiceKr NFP", "monospace";
         }
-    }
 
-    fn view(&self) -> Element<Message> {
-        container(
-            column![
-                text(&self.message).size(100),
-                button("Skip")
-                    .on_press(Message::Kill)
-                    .padding(10)
-                    .style(|_: &Theme, _| {
-                        let theme = &Theme::Nord;
-                        let palette = theme.extended_palette();
-
-                        button::Style::default().with_background(palette.primary.base.color)
-                    })
-            ]
-            .spacing(20)
-            .align_x(Alignment::Center)
-            .height(Length::Shrink),
-        )
-        .align_y(Alignment::Center)
-        .align_x(Alignment::Center)
-        .padding(20)
-        .center_x(Length::Fill)
-        .center_x(Length::Fill)
-        .into()
-    }
-
-    fn style(&self, _: &Self::Theme) -> iced_layershell::Appearance {
-        use iced_layershell::Appearance;
-
-        let theme = Theme::Nord;
-
-        Appearance {
-            background_color: theme.palette().background.scale_alpha(0.8),
-            text_color: theme.palette().text,
+        .transparent-window {
+            background-color: rgba(42, 39, 63, 0.7);
         }
-    }
+    "#;
+    provider.load_from_data(css_data);
+
+    gtk4::style_context_add_provider_for_display(
+        &gtk4::gdk::Display::default().expect("Could not connect to a display."),
+        &provider,
+        gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
+    );
+
+    let window = ApplicationWindow::builder()
+        .application(app)
+        .title("My Wayland Panel")
+        .build();
+
+    window.init_layer_shell();
+    window.set_layer(Layer::Overlay);
+    window.set_css_classes(&["transparent-window"]);
+    window.set_anchor(Edge::Top, true);
+    window.set_anchor(Edge::Bottom, true);
+    window.set_anchor(Edge::Left, true);
+    window.set_anchor(Edge::Right, true);
+    window.set_keyboard_mode(KeyboardMode::None);
+
+    let text = gtk4::Label::new(Some("Eye Break"));
+    text.set_css_classes(&["title-label"]);
+
+    let button = Button::with_label("Click me!");
+    button.connect_clicked(|_| {
+        eprintln!("Clicked!");
+    });
+    window.set_child(Some(&text));
+
+    show_and_schedule_hide(&window);
+}
+
+fn show_and_schedule_hide(window: &gtk4::ApplicationWindow) {
+    window.set_visible(true);
+
+    let window = window.clone();
+    glib::timeout_add_local(Duration::from_secs(VISIBLE_SECS), move || {
+        hide_and_schedule_show(&window);
+        glib::ControlFlow::Break
+    });
+}
+
+fn hide_and_schedule_show(window: &gtk4::ApplicationWindow) {
+    window.set_visible(false);
+
+    let stream_handle =
+        rodio::OutputStreamBuilder::open_default_stream().expect("open default audio stream");
+    let sink = rodio::Sink::connect_new(&stream_handle.mixer());
+
+    let source = SineWave::new(440.0)
+        .take_duration(Duration::from_secs(1))
+        .amplify(0.20);
+    sink.append(source);
+
+    sink.sleep_until_end();
+
+    let window = window.clone();
+    glib::timeout_add_local(Duration::from_secs(HIDDEN_SECS - 1), move || {
+        window.set_visible(true);
+        show_and_schedule_hide(&window);
+        glib::ControlFlow::Break
+    });
 }

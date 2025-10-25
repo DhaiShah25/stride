@@ -17,25 +17,16 @@
     packages.x86_64-linux.default = naerskLib.buildPackage {
       src = ./.;
       buildInputs = with pkgs; [
-        libGL
         wayland
-        libxkbcommon
+        gtk4-layer-shell
+        gtk4
         alsa-lib
-        vulkan-loader
-        kdePackages.wayland-protocols
-        xkeyboard-config
+        glib
       ];
 
       nativeBuildInputs = with pkgs; [
         pkg-config
-        makeWrapper
       ];
-
-      postInstall = ''
-        wrapProgram $out/bin/stride \
-          --prefix LD_LIBRARY_PATH : "${pkgs.wayland}/lib" \
-          --set XKB_CONFIG_ROOT "${pkgs.xkeyboard-config}/share/X11/xkb"
-      '';
     };
   };
 }

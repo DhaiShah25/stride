@@ -4,11 +4,11 @@ use std::time::{Duration, Instant};
 use humantime::Duration as hDuration;
 
 use iced::widget::{button, column, container, text};
-use iced::{Alignment, Element, Event, Length, Task, Theme, event};
-use iced_layershell::Application;
+use iced::{Alignment, Element, Length, Task, Theme};
 use iced_layershell::reexport::{Anchor, Layer};
 use iced_layershell::settings::{LayerShellSettings, Settings, StartMode};
 use iced_layershell::to_layer_message;
+use iced_layershell::Application;
 
 use clap::Parser;
 use rodio::{Decoder, OutputStream, Sink};
